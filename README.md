@@ -2,7 +2,7 @@
 
 ## Prelim Report:
 
-### Main:
+### Main
 This project was done jointly with [Matt Suski](https://www.linkedin.com/in/matt-suski/) for [Dr. Patrick's](https://www.baylor.edu/statistics/index.php?id=941853) Regression 3386 course. 
 
 ### Methodology
