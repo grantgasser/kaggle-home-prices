@@ -58,11 +58,7 @@ corrplot(M, method = "circle", type="lower")
 
 #Numerical variables to use: OverallQual, YearBuilt, YearRemodAdd, GrLiving, FullBath, TotRmsAbvGrd, Fireplaces
 
-#library(car)
-#vif(train.numeric)
 ########################
-
-#table(train$Street)
 
 #Re-set train and test data
 train = all_data[1:num_train,]
@@ -97,17 +93,15 @@ plot(fit, which = 2)
 #Also 121, 251, 272, 326, 584, 1004, 1231, 1271, 1276, 1299, 1322 not on plot
 
 
-############### REGSUBSETS: takes too long to run with 45 variables
+############### REGSUBSETS
 
 #Numerical variables to use: OverallQual, YearBuilt, YearRemodAdd, GrLivArea, FullBath, TotRmsAbvGrd, Fireplaces
 #Categorical variables: ExterQual, Neighborhood, SaleCondition, HouseStyle, MoSold
 
-#Look at MoSold relationship w Y
-#plot(train$MoSold, Y)
-
 #Now use regsubsets with the BIC/SBC criterion to get a final model
 fit.test <- lm(log(Y) ~ OverallQual + YearBuilt + YearRemodAdd + GrLivArea + FullBath + TotRmsAbvGrd + Fireplaces
                + ExterQual + Neighborhood + SaleCondition + HouseStyle, data=train)
+#Note how lm created dummy variables for us
 summary(fit.test)
 
 
@@ -117,7 +111,7 @@ regsubsets.out <- regsubsets(log(Y) ~ OverallQual + YearBuilt + YearRemodAdd + G
                              data = train,
                              nbest = 1,
                              method = "exhaustive", really.big=T)
-mat = summary(regsubsets.out)
+#mat = summary(regsubsets.out)
 #cbind(mat$outmat, mat$bic)[order(mat$bic),]
 plot(regsubsets.out, scale = "bic", main = expression(BIC))
 
@@ -133,24 +127,16 @@ library(car)
 vif(fit.new)
 
 #Neighborhood has high VIF, remove
-
 fit.new <- lm(log(Y) ~ OverallQual + YearBuilt + YearRemodAdd + GrLivArea + Fireplaces + HouseStyle, data=train)
-vif(fit.new) #Low VIFs, good model
+vif(fit.new) #Low VIFs, seem to have eliminated multicollinearity
 
-#Should we transform variables more?
-hist(train$OverallQual)
-hist(train$YearBuilt)
-hist(train$YearRemodAdd)
-hist(train$GrLivArea) #take log to normalize, similar to what we did with Y
-hist(train$Fireplaces)
-
-#Applying Log transform to GrLivingArea
+#Tried Log transform to GrLivingArea
 #fit.new <- lm(log(Y) ~ OverallQual + YearBuilt + YearRemodAdd + log(GrLivArea) + Fireplaces + HouseStyle, data=train)
 #vif(fit.new) #Low VIFs, good model
 
 #### Begin outlier analysis ####
 
-#Predict
+#Get prediction
 yhat <- predict(fit.new, train)
 
 plot(fit.new, which=1)
@@ -169,41 +155,51 @@ p = 6
 hii <- hatvalues(fit.new)
 names(which(hii>2*p/n))
 
-#Influential Points: lots (524, 1299)
+#Influential Points: lots, notably 524, 1299
 influ <- dffits(fit.new)
 names(which(abs(influ) >  2*sqrt(p/n)))
 
 #Cook's Distance: 1299 by far the most influential, then 524, then 329
 plot(fit.new, which = 4)
 
+#Mean of a couple variables
+mean(Y)
+mean(OverallQual)
+mean(GrLivArea)
+
 #Take a look at 1299 
-Y[1299]
+Y[1299] #160000, which is 20K less than the mean, that is we the model overestimated
 train[1299,]
 
 #OverallQual=10, GRLivArea=5642
 #So these are quite higher, would expect a high SalePrice, but SalePrice is actually
-Y[1299] #160000, which is 20K less than the mean, that is we the model overestimated
 
-#tranformed response for this observation, residual is about -1.5 which is large
+#tranformed response for this observation, residual is about -2 which is large
 log(Y[1299]) - yhat[1299]
 
 #Look at 524 (was overestimated)
 train[524,]
 Y[524]
 
-# $184K, Sold for about the mean despite OverallQual = 10 and super high GrLivArea of 4676, has fireplace, leading model to overestimate
+#$184K, Sold for about the mean despite OverallQual = 10 and super high GrLivArea of 4676, has fireplace, leading model to overestimate
 
 #Note: both of these have SaleCondition=partial, might explain why they sold for less than expected
 
-#SaleCondition=Partial means home was not completed when last assessed (associated with New Homes
+#SaleCondition=Partial means home was not completed when last assessed (associated with New Homes), per data information
 
 #Look at influence on Betas, can see 1299 and 524 having large effect on betas
 dfbetasPlots(fit.new)
 which(dfbetas(fit.new)[,2] > 1)
 
-qqPlot(rstudent(fit.new)) #still over estimating a large amount of homes for some reason
+qqPlot(rstudent(fit.new)) #still over estimating a large amount of homes
 
-#Hypothesis: 07-08 housing crisis
+#Many of the overestimated home prices were homes with not Normal SaleCondition and/or sold in 07-08
+overestimated <- which(rstudent(fit.new) < (-3))
+table(train[overestimated,]$YrSold)
+table(train[overestimated,]$SaleCondition)
+
+#WHY DOES MODEL OVERESTIMATE THESE? Hypothesis: 07-08 housing crisis. Many large, nice houses went unfinished and 
+#sold below typical market value
 
 #Note: the houses that are vastly overestimated were all sold around 2007 and 2008, YrSold not specific enough
 shapiro.test(rstudent(fit.new))
@@ -212,8 +208,6 @@ shapiro.test(rstudent(fit.new))
 library(lmtest)
 dwtest(fit.new) 
 bgtest(fit.new)
-
-#Indpendence seems to hold
 
 #Both tests: Not enough evidence to say the residuals are not independent
 
@@ -224,7 +218,7 @@ bptest(fit.new)
 #Remember:
 plot(fit.new, which=1)
 
-#.027487 compared to 0.0226 MSE from Lasso
+#.0275 compared to 0.0226 MSE from Lasso (done later)
 res <- log(Y) - yhat
 mse.1 <- sum((res)^2/(n-p))
 mse.1
@@ -265,7 +259,7 @@ write.csv(submission, file="../Project/output2.csv", row.names=FALSE)
 
 ########## Lasso
 
-### install dummy packages to transform dataset into dummy variables
+### install dummy packages to transform dataset into dummy variables since glmnet does not do this for us
 #install.packages("dummy")
 #install.packages("dummies")
 library(dummy)
@@ -277,8 +271,8 @@ library(dummies)
 dummy <- dummy.data.frame(train, names = "YrSold", dummy.classes = "factor")
 dummy.test <- dummy.data.frame(test, names = "YrSold", dummy.classes = "factor")
 
-# figure out what is going on 
-help(dummy.data.frame)
+#dummy 
+#help(dummy.data.frame)
 
 # check dimensions of new dataset
 dim(dummy) 
@@ -327,7 +321,7 @@ plot(fit.lasso.3)
 coef(fit.lasso.3, s='lambda.min', exact=T)
 lambda_min <- fit.lasso.3$lambda.min
 
-#25 variables left
+#25-40 variables left
 final.vars <- which(abs(coef(fit.lasso.3, s="lambda.min", exact=T)) > 0) - 1
 newX[, final.vars]
 
@@ -335,26 +329,34 @@ newX = data.frame(newX)
 #Run regsubsets
 regsubsets.out <- regsubsets(log(Y) ~ .,
                              data = newX,
-                             nbest = 1,
+                             nbest = 2,
                              method = "exhaustive", really.big=T)
-mat = summary(regsubsets.out)
+
+#mat = summary(regsubsets.out)
 #cbind(mat$outmat, mat$bic)[order(mat$bic),]
 plot(regsubsets.out, scale = "bic", main = expression(BIC))
 
 
-#Best model according to BIC includes Condition2PosN, BldgtTypeTwnns, OverallQual, OverallCond, YearBuilt
+#Best model according to BIC includes SaleCondition, BldgtTypeTwnns, OverallQual, OverallCond, YearBuilt
 #X1stFlrSF, GrLivArea, Fireplaces
-attach(newX)
-fit.final <- lm(log(Y) ~ OverallQual + Condition2PosN + BldgTypeTwnhs + YearBuilt + X1stFlrSF + GrLivArea + Fireplaces, data=newX)
+#attach(newX)
+fit.final <- lm(log(Y) ~ OverallQual + SaleConditionPartial + SaleConditionNormal + BldgTypeTwnhs + YearBuilt + X1stFlrSF + GrLivArea + Fireplaces, data=newX)
 
 ### Check normality
 
 # Get prediction on training set
 y.hat=predict(fit.final, newX)
+res = as.numeric(log(Y) - y.hat)
 
 ########################################### TODO
+
+#Transform test data to same dummy format of train data
+test = all_data[(num_train+1):(num_test+num_train),]
+dim(test)
+dummy.test <- dummy.data.frame(test,names = c("YrSold", "SaleCondition", "BldgType"),dummy.classes = "factor")
+
 #Make predictions on test data based on "Relaxed Lasso"
-test.predictions <- predict(fit.final, test)
+test.predictions <- predict(fit.final, dummy.test)
 test.predictions <- exp(test.predictions) #undo log transform for submission
 
 #Prepare for submission on Kaggle
@@ -362,31 +364,36 @@ submission <- cbind(ids, test.predictions)
 colnames(submission) <- c("Id", "SalePrice")
 
 #Output to csv file
-write.csv(submission, file="../Project/output.csv", row.names=FALSE)
+write.csv(submission, file="../Project/output_lasso.csv", row.names=FALSE)
+
+
+####Model selection with Lasso moved us up on leaderboard 112 places, RMSE = .16044
 
 # plot residuals
 qqPlot(fit.final)
 
-# test residuals for significance
+# test residuals for significance, residuals not normal
 shapiro.test(res)
-# Data is not normally distributed
+
+#Test independence of residuals
+library(lmtest)
+dwtest(fit.final) 
+bgtest(fit.final)
+
+#Both tests: Not enough evidence to say the residuals are not independent
+
+#Test whether residuals have constant variance
+bptest(fit.new) 
+#Lots of evidence to suggest the residuals do not have constant variance, no surprise
+
+#Remember:
+plot(fit.new, which=1)
 
 ### Get MSE of the data
 MSE = sum((res^2)/(nrow(train)-33))
 MSE
-# Model is similar to the one by res subsets
-##################################################
 
-# Check MSE with test data
-### Not working don't know why
-#test = all_data[(num_train+1):(num_test+num_train),]
-#Y.test = test$
-#dim(test)
-#dummy.test <- dummy.data.frame(test,names = "YrSold",dummy.classes = "factor")
-#X.test <- model.matrix(log(Y)~.,data=dummy.test)
+#A bit better than regsubsets only method
+mse.1
 
-#head(test)
-#head(train)
-#y.hat.test = predict(fit.lasso,dummy.test,type="response")
-#res.test = as.numeric(log(Y))
-
+################################################
