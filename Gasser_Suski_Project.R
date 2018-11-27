@@ -164,8 +164,8 @@ plot(fit.new, which = 4)
 
 #Mean of a couple variables
 mean(Y)
-mean(OverallQual)
-mean(GrLivArea)
+mean(train$OverallQual)
+mean(train$GrLivArea)
 
 #Take a look at 1299 
 Y[1299] #160000, which is 20K less than the mean, that is we the model overestimated
@@ -259,6 +259,8 @@ write.csv(submission, file="../Project/output2.csv", row.names=FALSE)
 
 ########## Lasso
 
+### NOTE: Lasso gives different variables every time it runs, comments may be off a bit
+
 ### install dummy packages to transform dataset into dummy variables since glmnet does not do this for us
 #install.packages("dummy")
 #install.packages("dummies")
@@ -282,6 +284,7 @@ newX = model.matrix(log(Y)~.,data=dummy)
 test = data.frame(dummy.test)
 
 # fit the lasso model using cv.glmnet
+library(glmnet)
 fit.lasso = cv.glmnet(x=newX,y=log(Y),alpha=1,nfolds=5)
 
 # visualize the lasso model
@@ -317,7 +320,7 @@ fit.lasso.3 <- cv.glmnet(x=newX,y=log(Y),alpha=1,nfolds=5)
 # visualize the lasso model
 plot(fit.lasso.3)
 
-# view coefficients lasso model 1SD away from min used 
+# view coefficients lasso model, min lambda used 
 coef(fit.lasso.3, s='lambda.min', exact=T)
 lambda_min <- fit.lasso.3$lambda.min
 
@@ -342,13 +345,11 @@ plot(regsubsets.out, scale = "bic", main = expression(BIC))
 #attach(newX)
 fit.final <- lm(log(Y) ~ OverallQual + SaleConditionPartial + SaleConditionNormal + BldgTypeTwnhs + YearBuilt + X1stFlrSF + GrLivArea + Fireplaces, data=newX)
 
-### Check normality
-
 # Get prediction on training set
 y.hat=predict(fit.final, newX)
 res = as.numeric(log(Y) - y.hat)
 
-########################################### TODO
+###########################################
 
 #Transform test data to same dummy format of train data
 test = all_data[(num_train+1):(num_test+num_train),]
@@ -368,6 +369,8 @@ write.csv(submission, file="../Project/output_lasso.csv", row.names=FALSE)
 
 
 ####Model selection with Lasso moved us up on leaderboard 112 places, RMSE = .16044
+
+### Check normality
 
 # plot residuals
 qqPlot(fit.final)
@@ -397,3 +400,4 @@ MSE
 mse.1
 
 ################################################
+
